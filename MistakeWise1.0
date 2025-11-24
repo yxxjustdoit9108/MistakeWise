@@ -1,27 +1,15 @@
 import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
+from tkinter import ttk, messagebox
 import sqlite3
 import random
 import os
-import csv
 from datetime import datetime
 
 class MistakeWise:
     def __init__(self, root):
         self.root = root
-        self.root.title("MistakeWise v2.0 - Smart Study Assistant")
+        self.root.title("MistakeWise v1.0 - Smart Study Assistant")
         self.root.geometry("800x600")
-        
-        # 颜色配置
-        self.colors = {
-            'primary': '#2E86AB',
-            'secondary': '#A23B72', 
-            'success': '#27AE60',
-            'warning': '#F39C12',
-            'danger': '#E74C3C',
-            'light_bg': '#F8F9FA',
-            'dark_text': '#2C3E50'
-        }
         
         # Initialize database with error handling
         try:
@@ -193,11 +181,6 @@ class MistakeWise:
         ttk.Button(action_frame, text='Edit Selected', command=self.edit_mistake).pack(side='left', padx=5)
         ttk.Button(action_frame, text='Delete Selected', command=self.delete_mistake).pack(side='left', padx=5)
         ttk.Button(action_frame, text='Refresh', command=self.refresh_mistakes_list).pack(side='left', padx=5)
-        
-        # 新增：导入导出按钮
-        ttk.Button(action_frame, text='Export CSV', command=self.export_to_csv).pack(side='left', padx=5)
-        ttk.Button(action_frame, text='Import CSV', command=self.import_from_csv).pack(side='left', padx=5)
-        ttk.Button(action_frame, text='Export Report', command=self.export_statistics_report).pack(side='left', padx=5)
 
     def create_study_tab(self):
         """Create the study/practice tab"""
@@ -287,9 +270,6 @@ class MistakeWise:
         self.avg_difficulty_label = ttk.Label(stats_frame, text='Average Difficulty: 0.0', font=('Arial', 10))
         self.avg_difficulty_label.grid(row=1, column=0, sticky='w', pady=5)
         
-        # 新增：导出报告按钮
-        ttk.Button(stats_frame, text='Export Full Report', command=self.export_statistics_report).grid(row=1, column=1, sticky='w', pady=5, padx=20)
-        
         # Topics breakdown frame
         topics_frame = ttk.LabelFrame(analytics_frame, text='Mistakes by Topic', padding=15)
         topics_frame.pack(fill='both', expand=True, pady=10)
@@ -314,163 +294,6 @@ class MistakeWise:
         
         # Refresh analytics button
         ttk.Button(analytics_frame, text='Refresh Analytics', command=self.refresh_analytics).pack(pady=10)
-
-    # 新增：数据导入导出功能
-    def export_to_csv(self):
-        """Export all mistakes to CSV file"""
-        try:
-            # Connect to database
-            conn = sqlite3.connect('mistakes.db')
-            cursor = conn.cursor()
-            cursor.execute('''
-                SELECT topic, question, answer, difficulty, times_reviewed, 
-                       last_reviewed, created_date 
-                FROM mistakes
-            ''')
-            mistakes = cursor.fetchall()
-            conn.close()
-            
-            if not mistakes:
-                messagebox.showinfo('Info', 'No data to export!')
-                return
-            
-            # Generate filename with timestamp
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"mistakes_export_{timestamp}.csv"
-            
-            # Write to CSV file
-            with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
-                writer = csv.writer(csvfile)
-                
-                # Write header
-                writer.writerow([
-                    'Topic', 'Question', 'Answer', 'Difficulty', 
-                    'Times Reviewed', 'Last Reviewed', 'Created Date'
-                ])
-                
-                # Write data
-                for mistake in mistakes:
-                    writer.writerow(mistake)
-            
-            messagebox.showinfo('Export Success', f'Data exported to: {filename}')
-            
-        except Exception as e:
-            messagebox.showerror('Export Error', f'Export failed: {str(e)}')
-
-    def import_from_csv(self):
-        """Import mistakes from CSV file"""
-        try:
-            # Open file dialog
-            filepath = filedialog.askopenfilename(
-                title='Select CSV File',
-                filetypes=[('CSV files', '*.csv'), ('All files', '*.*')]
-            )
-            
-            if not filepath:
-                return  # User canceled
-            
-            # Read CSV file
-            imported_count = 0
-            with open(filepath, 'r', encoding='utf-8') as csvfile:
-                reader = csv.reader(csvfile)
-                
-                # Skip header
-                header = next(reader, None)
-                
-                # Connect to database
-                conn = sqlite3.connect('mistakes.db')
-                cursor = conn.cursor()
-                
-                for row in reader:
-                    if len(row) >= 4:  # At least topic, question, answer, difficulty
-                        topic, question, answer, difficulty = row[0], row[1], row[2], row[3]
-                        
-                        # Validate and set default values
-                        if not difficulty.isdigit() or not (1 <= int(difficulty) <= 5):
-                            difficulty = 1
-                        
-                        # Insert into database
-                        cursor.execute('''
-                            INSERT OR IGNORE INTO mistakes 
-                            (topic, question, answer, difficulty) 
-                            VALUES (?, ?, ?, ?)
-                        ''', (topic, question, answer, int(difficulty)))
-                        
-                        imported_count += 1
-                
-                conn.commit()
-                conn.close()
-            
-            messagebox.showinfo('Import Success', f'Successfully imported {imported_count} mistakes!')
-            
-            # Refresh displays
-            self.refresh_mistakes_list()
-            self.refresh_topics_list()
-            self.refresh_analytics()
-            
-        except Exception as e:
-            messagebox.showerror('Import Error', f'Import failed: {str(e)}')
-
-    def export_statistics_report(self):
-        """Export learning statistics report"""
-        try:
-            conn = sqlite3.connect('mistakes.db')
-            cursor = conn.cursor()
-            
-            # Get statistics
-            cursor.execute('SELECT COUNT(*) FROM mistakes')
-            total_mistakes = cursor.fetchone()[0]
-            
-            cursor.execute('SELECT COUNT(DISTINCT topic) FROM mistakes')
-            total_topics = cursor.fetchone()[0]
-            
-            cursor.execute('SELECT AVG(difficulty) FROM mistakes')
-            avg_difficulty = cursor.fetchone()[0] or 0
-            
-            cursor.execute('SELECT SUM(times_reviewed) FROM mistakes')
-            total_reviews = cursor.fetchone()[0] or 0
-            
-            cursor.execute('SELECT COUNT(*) FROM study_sessions')
-            total_sessions = cursor.fetchone()[0] or 0
-            
-            # Get topic breakdown
-            cursor.execute('''
-                SELECT topic, COUNT(*), AVG(difficulty) 
-                FROM mistakes 
-                GROUP BY topic 
-                ORDER BY COUNT(*) DESC
-            ''')
-            topics_breakdown = cursor.fetchall()
-            
-            # Generate report file
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"learning_report_{timestamp}.txt"
-            
-            with open(filename, 'w', encoding='utf-8') as f:
-                f.write("=== MISTAKEWISE LEARNING REPORT ===\n")
-                f.write(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-                f.write("=" * 40 + "\n\n")
-                
-                f.write("OVERALL STATISTICS:\n")
-                f.write(f"  Total Mistakes: {total_mistakes}\n")
-                f.write(f"  Total Topics: {total_topics}\n")
-                f.write(f"  Average Difficulty: {avg_difficulty:.1f}/5.0\n")
-                f.write(f"  Total Reviews: {total_reviews}\n")
-                f.write(f"  Study Sessions: {total_sessions}\n\n")
-                
-                f.write("TOPICS BREAKDOWN:\n")
-                for topic, count, avg_diff in topics_breakdown:
-                    f.write(f"  {topic}: {count} mistakes (avg difficulty: {avg_diff:.1f}/5.0)\n")
-                
-                f.write("\n" + "=" * 40 + "\n")
-                f.write("Keep up the great work! Learning is a journey. 💪\n")
-            
-            messagebox.showinfo('Report Generated', f'Learning report exported to: {filename}')
-            
-            conn.close()
-            
-        except Exception as e:
-            messagebox.showerror('Error', f'Failed to generate report: {str(e)}')
 
     # Database operations
     def get_all_topics(self):
